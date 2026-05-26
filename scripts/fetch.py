@@ -77,7 +77,7 @@ def main() -> None:
         print(f"Logged in, current URL: {page.url}")
 
         # ── 2. Download CSV ─────────────────────────────────────────────────
-        with ctx.expect_download(timeout=30000) as dl_info:
+        with page.expect_download(timeout=30000) as dl_info:
             page.goto("https://www.jefit.com/my-jefit/settings/exportData.php")
 
         dl = dl_info.value
