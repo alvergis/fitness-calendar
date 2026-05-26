@@ -76,13 +76,20 @@ def main() -> None:
 
         print(f"Logged in, current URL: {page.url}")
 
-        # ── 2. Download CSV ─────────────────────────────────────────────────
-        with page.expect_download(timeout=30000) as dl_info:
-            page.goto("https://www.jefit.com/my-jefit/settings/exportData.php")
+        # ── 2. Extract cookies and download CSV via requests ────────────────
+        import requests as req
+        session = req.Session()
+        for cookie in ctx.cookies():
+            session.cookies.set(cookie["name"], cookie["value"], domain=cookie["domain"])
 
-        dl = dl_info.value
-        dl.save_as(OUT)
-        print(f"Saved: {OUT}")
+        resp = session.get(
+            "https://www.jefit.com/my-jefit/settings/exportData.php",
+            headers={"User-Agent": ctx._impl_obj._options.get("userAgent", "")},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        OUT.write_bytes(resp.content)
+        print(f"Saved: {OUT} ({len(resp.content)} bytes)")
 
         browser.close()
 
