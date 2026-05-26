@@ -1,0 +1,48 @@
+name: Update Fitness Calendar
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # 12:00 UTC = 5 am PT / 8 am ET daily
+  workflow_dispatch:        # allow manual run from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browser
+        run: python -m playwright install chromium --with-deps
+
+      - name: Download JEFIT data
+        env:
+          JEFIT_EMAIL:    ${{ secrets.JEFIT_EMAIL }}
+          JEFIT_PASSWORD: ${{ secrets.JEFIT_PASSWORD }}
+        run: python scripts/fetch.py
+
+      - name: Regenerate calendar
+        run: python scripts/generate.py
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update calendar $(date -u +%Y-%m-%d)"
+            git push
+          else
+            echo "No changes to commit"
+          fi
