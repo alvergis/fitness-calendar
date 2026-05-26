@@ -34,19 +34,42 @@ def main() -> None:
 
         # ── 1. Log in ──────────────────────────────────────────────────────
         page.goto("https://www.jefit.com/login", wait_until="networkidle")
+        page.screenshot(path=str(OUT.parent / "debug_login.png"))
 
+        # Dismiss cookie banner if present
         try:
             page.click('button:has-text("Accept")', timeout=3000)
         except PWTimeout:
             pass
 
-        page.fill('input[type="email"], input[name="email"]', EMAIL)
+        # Wait for any visible email/text input
+        try:
+            page.wait_for_selector(
+                'input[type="email"], input[type="text"], input[name="email"], input[name="username"]',
+                timeout=15000, state="visible"
+            )
+        except PWTimeout:
+            page.screenshot(path=str(OUT.parent / "debug_no_form.png"))
+            print("Could not find login form — screenshot saved", file=sys.stderr)
+            browser.close()
+            sys.exit(1)
+
+        page.screenshot(path=str(OUT.parent / "debug_form_visible.png"))
+
+        # Fill whichever input is present
+        email_input = page.locator('input[type="email"], input[name="email"]').first
+        text_input  = page.locator('input[type="text"], input[name="username"]').first
+        if email_input.count():
+            email_input.fill(EMAIL)
+        else:
+            text_input.fill(EMAIL)
         page.fill('input[type="password"]', PASSWORD)
         page.click('button[type="submit"]')
 
         try:
             page.wait_for_url(lambda url: "login" not in url.lower(), timeout=20000)
         except PWTimeout:
+            page.screenshot(path=str(OUT.parent / "debug_after_submit.png"))
             print("Login failed — double-check JEFIT_EMAIL and JEFIT_PASSWORD", file=sys.stderr)
             browser.close()
             sys.exit(1)

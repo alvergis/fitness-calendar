@@ -32,6 +32,14 @@ jobs:
           JEFIT_PASSWORD: ${{ secrets.JEFIT_PASSWORD }}
         run: python scripts/fetch.py
 
+      - name: Upload debug screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: data/debug_*.png
+          if-no-files-found: ignore
+
       - name: Regenerate calendar
         run: python scripts/generate.py
 
