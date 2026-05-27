@@ -2,7 +2,7 @@ name: Update Fitness Calendar
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # 06:00 UTC = 10 pm PT / 1 am ET daily
+    - cron: '0 5 * * *'  # 05:00 UTC = 10 pm PDT / 11 pm PST daily
   workflow_dispatch:        # allow manual run from GitHub UI
 
 permissions:
