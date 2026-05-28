@@ -5,8 +5,11 @@ import csv
 import io
 import json
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
+
+USER_TZ = ZoneInfo("America/Los_Angeles")
 
 ROOT     = Path(__file__).parent.parent
 DATA     = ROOT / "data" / "workouts.csv"
@@ -60,20 +63,6 @@ def parse_workouts(csv_text: str) -> dict[str, list[str]]:
         if date:
             result.setdefault(date, set()).add(wtype)
 
-    # Read user timezone offset from SETTING section (zonedifference column)
-    zone_hours = 0
-    setting_lines = sections.get("SETTING", [])
-    if len(setting_lines) >= 2:
-        hdr_line = next((l for l in setting_lines if l.startswith("row_id,")), None)
-        dat_lines = [l for l in setting_lines if l[0].isdigit()]
-        if hdr_line and dat_lines:
-            row = csv_row(hdr_line, dat_lines[0])
-            try:
-                zone_hours = int(row.get("zonedifference", "0"))
-            except ValueError:
-                pass
-    user_tz = timezone(timedelta(hours=zone_hours))
-
     # Build dayId → workout type from ROUTINES section
     day_type: dict[str, str] = {}
     last_hdr: str | None = None
@@ -107,7 +96,7 @@ def parse_workouts(csv_text: str) -> dict[str, list[str]]:
         t = day_type.get(row.get("day_id", ""))
         if not t:
             continue
-        ds = datetime.fromtimestamp(int(starttime), tz=user_tz).strftime("%Y-%m-%d")
+        ds = datetime.fromtimestamp(int(starttime), tz=USER_TZ).strftime("%Y-%m-%d")
         add(ds, t)
 
     # EXERCISE LOGS → running (ename contains "run")
