@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse data/workouts.csv and regenerate index.html from template.html."""
+"""Parse data/workouts.csv + steps.json and regenerate index.html from template.html."""
 
 from __future__ import annotations
 
@@ -8,34 +8,26 @@ import io
 import json
 import re
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 USER_TZ = ZoneInfo("America/Los_Angeles")
 
 ROOT     = Path(__file__).parent.parent
 DATA     = ROOT / "data" / "workouts.csv"
+STEPS    = ROOT / "steps.json"
 TEMPLATE = ROOT / "template.html"
 OUT      = ROOT / "index.html"
 
-
-RUN_RE = re.compile(r"\b(run|runs|running|runner)\b")
-
-
-def is_run(name: str) -> bool:
-    return bool(RUN_RE.search(name.lower()))
+STATIONARY_BIKE_EID = "318"
 
 
-def infer_type(name: str) -> str | None:
+def routine_kind(name: str) -> str | None:
     n = name.lower()
     if any(k in n for k in ("strength", "lift", "weight")):
         return "strength"
-    if is_run(n) or any(k in n for k in ("cardio", "jog", "walk", "bike", "cycle")):
-        return "running"
     if any(k in n for k in ("core", "abs", "plank")):
         return "core"
-    if any(k in n for k in ("mobil", "stretch", "yoga", "flexib")):
-        return "mobility"
     return None
 
 
@@ -64,99 +56,94 @@ def parse_sections(text: str) -> dict[str, list[str]]:
     return sections
 
 
-def parse_workouts(csv_text: str) -> dict[str, list[str]]:
+def rows(lines: list[str], header_prefixes: tuple[str, ...]):
+    """Yield dict rows from a section, using the most recent header line."""
+    hdr = None
+    for line in lines:
+        if line.startswith(header_prefixes):
+            hdr = line
+            continue
+        if hdr and line[0].isdigit():
+            yield hdr, csv_row(hdr, line)
+
+
+def parse_days(csv_text: str) -> dict[str, list[int]]:
+    """Return {date: [strength 0/1, core 0/1, bike_minutes]}."""
     sections = parse_sections(csv_text)
-    result: dict[str, set[str]] = {}
+    strength: set[str] = set()
+    core: set[str] = set()
+    bike_secs_sessions: dict[str, int] = {}
+    bike_secs_cardio: dict[str, int] = {}
 
-    def add(date: str, wtype: str) -> None:
-        if date:
-            result.setdefault(date, set()).add(wtype)
-
-    # Build dayId → workout type from ROUTINES section
-    day_type: dict[str, str] = {}
-    last_hdr: str | None = None
+    # ROUTINES → day _id → kind
+    day_kind: dict[str, str] = {}
+    last_hdr = None
     for line in sections.get("ROUTINES", []):
         if line.startswith("row_id,"):
             last_hdr = line
             continue
-        if not last_hdr:
-            continue
-        if "package" in last_hdr and "dayIndex" in last_hdr:
+        if last_hdr and "package" in last_hdr and "dayIndex" in last_hdr:
             row = csv_row(last_hdr, line)
-            day_id = row.get("_id", "")
-            name   = row.get("name", "")
-            if day_id and name:
-                t = infer_type(name)
-                if t:
-                    day_type[day_id] = t
+            kind = routine_kind(row.get("name", ""))
+            if row.get("_id") and kind:
+                day_kind[row["_id"]] = kind
 
-    # WORKOUT SESSIONS → typed workout dates
-    sess_hdr: str | None = None
-    for line in sections.get("WORKOUT SESSIONS", []):
-        if line.startswith(("rowid,", "row_id,")):
-            sess_hdr = line
-            continue
-        if not sess_hdr or not line[0].isdigit():
-            continue
-        row = csv_row(sess_hdr, line)
+    # WORKOUT SESSIONS → strength / core dates
+    for _, row in rows(sections.get("WORKOUT SESSIONS", []), ("rowid,", "row_id,")):
         starttime = row.get("starttime", "0")
-        if not starttime.lstrip("-").isdigit() or int(starttime) <= 0:
+        if not starttime.isdigit() or int(starttime) <= 0:
             continue
-        t = day_type.get(row.get("day_id", ""))
-        if not t:
+        kind = day_kind.get(row.get("day_id", ""))
+        if not kind:
             continue
-        ds = datetime.fromtimestamp(int(starttime), tz=USER_TZ).strftime("%Y-%m-%d")
-        add(ds, t)
+        date = datetime.fromtimestamp(int(starttime), tz=USER_TZ).strftime("%Y-%m-%d")
+        (strength if kind == "strength" else core).add(date)
 
-    # EXERCISE LOGS → running (ename contains "run")
-    ex_hdr: str | None = None
-    for line in sections.get("EXERCISE LOGS", []):
-        if line.startswith("USERID,"):
-            ex_hdr = line
-            continue
-        if not ex_hdr or not line[0].isdigit():
-            continue
-        row = csv_row(ex_hdr, line)
-        if is_run(row.get("ename", "")) and row.get("mydate"):
-            add(row["mydate"], "running")
+    # EXERCISE SET LOGS → duration (seconds) per exercise log id
+    set_secs: dict[str, int] = {}
+    for _, row in rows(sections.get("EXERCISE SET LOGS", []), ("_id,",)):
+        dur = row.get("duration", "")
+        if dur.isdigit():
+            key = row.get("exercise_log_id", "")
+            set_secs[key] = set_secs.get(key, 0) + int(dur)
 
-    # CARDIO LOGS → running (eid = 317)
-    cardio_hdr: str | None = None
-    for line in sections.get("CARDIO LOGS", []):
-        if line.startswith("row_id,"):
-            cardio_hdr = line
-            continue
-        if not cardio_hdr or not line[0].isdigit():
-            continue
-        row = csv_row(cardio_hdr, line)
-        try:
-            eid = int(row.get("eid", "0"))
-        except ValueError:
-            continue
-        if eid == 317 and row.get("mydate"):
-            add(row["mydate"], "running")
+    # EXERCISE LOGS → stationary bike (duration from set logs)
+    for _, row in rows(sections.get("EXERCISE LOGS", []), ("USERID,",)):
+        if row.get("eid") == STATIONARY_BIKE_EID and row.get("mydate"):
+            d = row["mydate"]
+            bike_secs_sessions[d] = bike_secs_sessions.get(d, 0) + set_secs.get(row.get("_id", ""), 0)
 
-    return {date: sorted(types) for date, types in sorted(result.items())}
+    # CARDIO LOGS (older format) → stationary bike
+    for _, row in rows(sections.get("CARDIO LOGS", []), ("row_id,",)):
+        if row.get("eid") == STATIONARY_BIKE_EID and row.get("mydate"):
+            dur = row.get("duration", "")
+            if dur.isdigit():
+                d = row["mydate"]
+                bike_secs_cardio[d] = bike_secs_cardio.get(d, 0) + int(dur)
+
+    dates = set(strength) | set(core) | set(bike_secs_sessions) | set(bike_secs_cardio)
+    result: dict[str, list[int]] = {}
+    for d in sorted(dates):
+        # The two bike sources can describe the same entry, so take the larger.
+        bike = max(bike_secs_sessions.get(d, 0), bike_secs_cardio.get(d, 0)) // 60
+        result[d] = [int(d in strength), int(d in core), bike]
+    return result
 
 
 def main() -> None:
-    csv_text = DATA.read_text(encoding="utf-8")
-    workouts = parse_workouts(csv_text)
+    days  = parse_days(DATA.read_text(encoding="utf-8"))
+    steps = json.loads(STEPS.read_text()) if STEPS.exists() else {}
     template = TEMPLATE.read_text(encoding="utf-8")
 
-    today     = datetime.now().strftime("%Y-%m-%d")
-    json_str  = json.dumps(workouts)
-
-    out = re.sub(
-        r"const SEEDED_DATA = \{[^}]*\};",
-        f"const SEEDED_DATA = {json_str};",
-        template,
-        count=1,
+    today = datetime.now(USER_TZ).strftime("%Y-%m-%d")
+    out = (
+        template
+        .replace("__DAYS__", json.dumps(days))
+        .replace("__STEPS__", json.dumps(steps, sort_keys=True))
+        .replace("__DATE__", today)
     )
-    out = re.sub(r"__DATE__", today, out)
-
     OUT.write_text(out, encoding="utf-8")
-    print(f"Generated {OUT} ({len(workouts)} workout days)")
+    print(f"Generated {OUT} ({len(days)} workout days, {len(steps)} step days)")
 
 
 if __name__ == "__main__":

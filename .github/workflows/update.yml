@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-calendar   # Oura refresh tokens are single-use: never run two syncs at once
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -40,6 +44,14 @@ jobs:
           path: data/debug_*.png
           if-no-files-found: ignore
 
+      - name: Sync Oura steps
+        env:
+          OURA_CLIENT_ID:     ${{ secrets.OURA_CLIENT_ID }}
+          OURA_CLIENT_SECRET: ${{ secrets.OURA_CLIENT_SECRET }}
+          OURA_REFRESH_TOKEN: ${{ secrets.OURA_REFRESH_TOKEN }}
+          GH_SECRETS_PAT:     ${{ secrets.GH_SECRETS_PAT }}
+        run: python scripts/fetch_oura.py
+
       - name: Regenerate calendar
         run: python scripts/generate.py
 
@@ -47,7 +59,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
+          git add index.html steps.json
           if ! git diff --staged --quiet; then
             git commit -m "chore: update calendar $(date -u +%Y-%m-%d)"
             git push
