@@ -62,7 +62,7 @@
       <span>Hollow = not done</span>
     </div>
     <div class="legend" style="margin-top:8px">
-      <span><i class="dot" style="background:var(--check)"></i>Week checks (Mon&ndash;Sun, shown after Sunday): Steps = 9k every day &middot; Core+Bike = every non-strength day &middot; Strength = 3 sessions</span>
+      <span><i class="dot" style="background:var(--check)"></i>Week checks (Mon&ndash;Sun): Steps = 9k all 7 days &middot; Core+Bike = core + 20 min bike on every non-strength day &middot; Strength = 3 sessions. Counts show progress until each is met.</span>
     </div>
   </div>
   <div class="note">Updated 2026-10-12</div>
@@ -100,15 +100,23 @@
     return h + (i.core ? m('core', true) : '') + (i.bike ? m('bike', true) : '');
   }
 
+  // Week rows start at the first week we have Oura step data for
+  const FIRST_WEEK = (() => {
+    const first = Object.keys(STEPS).sort()[0] || TRACK_START;
+    const d = parse(first);
+    return iso(addDays(d, -((d.getDay() + 6) % 7)));
+  })();
+
   function weekChecks(monday) {
     const days = [...Array(7)].map((_, k) => iso(addDays(monday, k)));
-    if (days[0] < TRACK_START || days[6] >= TODAY) return '<div class="wkchecks"></div>';   // untracked or unfinished
+    if (days[0] < FIRST_WEEK || days[0] > TODAY) return '<div class="wkchecks"></div>';   // before data starts / not started
     const inf = days.map(info);
-    const steps = inf.every(i => i.steps);
-    const cb    = inf.every(i => i.str || (i.core && i.bike));
-    const str   = inf.filter(i => i.str).length >= STRENGTH_GOAL;
-    const row = (ok, label) => `<div class="wc ${ok ? 'ok' : ''}"><span class="b">${ok ? '&#10003;' : ''}</span>${label}</div>`;
-    return `<div class="wkchecks">${row(steps, 'Steps')}${row(cb, 'Core+Bike')}${row(str, 'Strength')}</div>`;
+    const stepsN = inf.filter(i => i.steps).length;
+    const dailyN = inf.filter(i => i.str || (i.core && i.bike)).length;
+    const strN   = inf.filter(i => i.str).length;
+    const row = (ok, label, n, of) =>
+      `<div class="wc ${ok ? 'ok' : ''}"><span class="b">${ok ? '&#10003;' : ''}</span>${label}${ok ? '' : ` ${n}/${of}`}</div>`;
+    return `<div class="wkchecks">${row(stepsN === 7, 'Steps', stepsN, 7)}${row(dailyN === 7, 'Core+Bike', dailyN, 7)}${row(strN >= STRENGTH_GOAL, 'Strength', strN, STRENGTH_GOAL)}</div>`;
   }
 
   function render() {
