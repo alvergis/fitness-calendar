@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Parse data/workouts.csv and regenerate index.html from template.html."""
 
+from __future__ import annotations
+
 import csv
 import io
 import json
@@ -17,11 +19,18 @@ TEMPLATE = ROOT / "template.html"
 OUT      = ROOT / "index.html"
 
 
+RUN_RE = re.compile(r"\b(run|runs|running|runner)\b")
+
+
+def is_run(name: str) -> bool:
+    return bool(RUN_RE.search(name.lower()))
+
+
 def infer_type(name: str) -> str | None:
     n = name.lower()
     if any(k in n for k in ("strength", "lift", "weight")):
         return "strength"
-    if any(k in n for k in ("run", "cardio", "jog", "walk", "bike", "cycle")):
+    if is_run(n) or any(k in n for k in ("cardio", "jog", "walk", "bike", "cycle")):
         return "running"
     if any(k in n for k in ("core", "abs", "plank")):
         return "core"
@@ -108,7 +117,7 @@ def parse_workouts(csv_text: str) -> dict[str, list[str]]:
         if not ex_hdr or not line[0].isdigit():
             continue
         row = csv_row(ex_hdr, line)
-        if "run" in row.get("ename", "").lower() and row.get("mydate"):
+        if is_run(row.get("ename", "")) and row.get("mydate"):
             add(row["mydate"], "running")
 
     # CARDIO LOGS → running (eid = 317)
