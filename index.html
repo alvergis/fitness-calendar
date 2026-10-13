@@ -18,7 +18,7 @@
   .nav { display:flex; gap:6px; }
   .nav button { background:var(--cell); color:var(--text); border:0; border-radius:8px; width:36px; height:32px; font-size:18px; cursor:pointer; }
 
-  .dow, .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .dow, .grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)) 20px; gap:4px; }
   .dow div { text-align:center; font-size:12px; color:var(--muted); padding-bottom:4px; }
   .cell { aspect-ratio:1/1.15; border-radius:8px; background:var(--cell); padding:3px 4px; display:flex; flex-direction:column; justify-content:space-between; }
   .cell.out { opacity:.4; }
@@ -32,15 +32,13 @@
   .m.core  { border-color:var(--core); }   .m.core.on { background:var(--core); }
   .m.bike  { border-color:var(--bike); }   .m.bike.on { background:var(--bike); }
 
-  .wkchecks { grid-column:1 / -1; display:flex; justify-content:space-between; padding:2px 4px 8px; gap:4px; }
-  .wkchecks:empty { display:none; }
-  .wc { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
-  .wc .b { width:18px; height:18px; border-radius:50%; border:1.5px dashed var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; flex:none; }
-  .wc.ok { color:var(--text); }
-  .wc.ok .b { border:0; background:var(--check); }
+  .wkchecks { display:flex; flex-direction:column; justify-content:center; align-items:center; gap:3px; }
+  .wc .b { width:16px; height:16px; border-radius:50%; border:1.25px dashed var(--muted); display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:var(--muted); line-height:1; }
+  .wc.ok .b { border:0; background:var(--check); color:#fff; font-size:11px; }
 
   .legend { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:14px; color:var(--muted); font-size:11px; }
   .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend .block { display:block; }
   .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
   .note { color:var(--muted); font-size:11px; margin-top:14px; text-align:center; }
 </style>
@@ -52,7 +50,7 @@
       <h1 id="title"></h1>
       <div class="nav"><button id="prev" aria-label="Previous month">&lsaquo;</button><button id="next" aria-label="Next month">&rsaquo;</button></div>
     </div>
-    <div class="dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
+    <div class="dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div><div title="Week goals">&#10003;</div></div>
     <div class="grid" id="grid"></div>
     <div class="legend">
       <span><i class="m steps on"></i>Steps &ge; 9k</span>
@@ -62,7 +60,7 @@
       <span>Hollow = not done</span>
     </div>
     <div class="legend" style="margin-top:8px">
-      <span><i class="dot" style="background:var(--check)"></i>Week checks (Mon&ndash;Sun): Steps = 9k all 7 days &middot; Core+Bike = core + 20 min bike on every non-strength day &middot; Strength = 3 sessions. Counts show progress until each is met.</span>
+      <span class="block"><i class="dot" style="background:var(--check); margin-right:6px"></i>Right column, top to bottom: <b>Steps</b> (9k all 7 days) &middot; <b>Core+Bike</b> (core + 20 min bike on every non-strength day) &middot; <b>Strength</b> (3 sessions). Check = goal met, number = progress.</span>
     </div>
   </div>
   <div class="note">Updated 2026-10-12</div>
@@ -114,9 +112,9 @@
     const stepsN = inf.filter(i => i.steps).length;
     const dailyN = inf.filter(i => i.str || (i.core && i.bike)).length;
     const strN   = inf.filter(i => i.str).length;
-    const row = (ok, label, n, of) =>
-      `<div class="wc ${ok ? 'ok' : ''}"><span class="b">${ok ? '&#10003;' : ''}</span>${label}${ok ? '' : ` ${n}/${of}`}</div>`;
-    return `<div class="wkchecks">${row(stepsN === 7, 'Steps', stepsN, 7)}${row(dailyN === 7, 'Core+Bike', dailyN, 7)}${row(strN >= STRENGTH_GOAL, 'Strength', strN, STRENGTH_GOAL)}</div>`;
+    const dot = (ok, label, n, of) =>
+      `<div class="wc ${ok ? 'ok' : ''}" title="${label} ${n}/${of}"><span class="b">${ok ? '&#10003;' : n}</span></div>`;
+    return `<div class="wkchecks">${dot(stepsN === 7, 'Steps', stepsN, 7)}${dot(dailyN === 7, 'Core+Bike', dailyN, 7)}${dot(strN >= STRENGTH_GOAL, 'Strength', strN, STRENGTH_GOAL)}</div>`;
   }
 
   function render() {
