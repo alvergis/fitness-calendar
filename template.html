@@ -93,6 +93,8 @@
     let h = '';
     if (tracked || i.hasSteps && i.steps) h += m('steps', i.steps);
     if (i.str) return h + m('str', true);
+    // Today with nothing logged yet could still become a strength day, so show that goal too.
+    if (ds === TODAY && !i.core && !i.bike) return h + m('str', false) + m('core', false) + m('bike', false);
     if (tracked) return h + m('core', i.core) + m('bike', i.bike);
     return h + (i.core ? m('core', true) : '') + (i.bike ? m('bike', true) : '');
   }
