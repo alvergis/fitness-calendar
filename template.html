@@ -56,10 +56,10 @@
       <span><i class="m str on"></i>Strength</span>
       <span><i class="m core on"></i>Core</span>
       <span><i class="m bike on"></i>Bike 20 min</span>
-      <span>Hollow = not done</span>
+      <span>Hollow = steps missed</span>
     </div>
     <div class="legend" style="margin-top:8px">
-      <span class="block"><i class="dot" style="background:var(--check)"></i>Week ring (right of Sunday), clockwise from the top: <b>Steps</b> (9k all 7 days) &middot; <b>Core+Bike</b> (core + 20 min bike on every non-strength day) &middot; <b>Strength</b> (3 sessions). Pink = met. Center = goals met, or a check when all three are.</span>
+      <span class="block"><i class="dot" style="background:var(--check)"></i>Week ring (right of Sunday), clockwise from the top: <b>Steps</b> (9k on 6 days) &middot; <b>Strength</b> (3 sessions) &middot; <b>Core</b> (2 days) &middot; <b>Bike</b> (2 days, 20+ min). Pink = met. Center = goals met, or a check when all four are.</span>
     </div>
   </div>
   <div class="note">Updated __DATE__</div>
@@ -70,7 +70,9 @@
   const DAYS  = __DAYS__;
   const STEPS = __STEPS__;
 
-  const STEP_GOAL = 9000, BIKE_GOAL = 20, STRENGTH_GOAL = 3;
+  // Per week: 6 days of 9k steps, 3 strength, 2 core days, 2 bike days (20+ min)
+  const STEP_GOAL = 9000, BIKE_GOAL = 20;
+  const STEPS_DAYS = 6, STRENGTH_GOAL = 3, CORE_GOAL = 2, BIKE_DAYS = 2;
   const TRACK_START = '2026-10-12';   // week checks and hollow markers begin here (a Monday)
 
   const pad = n => String(n).padStart(2, '0');
@@ -92,11 +94,8 @@
     const m = (cls, on) => `<i class="m ${cls} ${on ? 'on' : ''}"></i>`;
     let h = '';
     if (tracked || i.hasSteps && i.steps) h += m('steps', i.steps);
-    if (i.str) return h + m('str', true);
-    // Today with nothing logged yet could still become a strength day, so show that goal too.
-    if (ds === TODAY && !i.core && !i.bike) return h + m('str', false) + m('core', false) + m('bike', false);
-    if (tracked) return h + m('core', i.core) + m('bike', i.bike);
-    return h + (i.core ? m('core', true) : '') + (i.bike ? m('bike', true) : '');
+    // Strength, core and bike are weekly goals, so only show them once done.
+    return h + (i.str ? m('str', true) : '') + (i.core ? m('core', true) : '') + (i.bike ? m('bike', true) : '');
   }
 
   // Week rows start at the first week we have Oura step data for
@@ -111,18 +110,19 @@
     if (days[0] < FIRST_WEEK || days[0] > TODAY) return '<div class="wkchecks"></div>';   // before data starts / not started
     const inf = days.map(info);
     const stepsN = inf.filter(i => i.steps).length;
-    const dailyN = inf.filter(i => i.str || (i.core && i.bike)).length;
     const strN   = inf.filter(i => i.str).length;
-    const segs = [stepsN === 7, dailyN === 7, strN >= STRENGTH_GOAL];   // clockwise from top: Steps, Core+Bike, Strength
-    const R = 16, C = 2 * Math.PI * R, GAP = 5, LEN = (C - 3 * GAP) / 3;
+    const coreN  = inf.filter(i => i.core).length;
+    const bikeN  = inf.filter(i => i.bike).length;
+    const segs = [stepsN >= STEPS_DAYS, strN >= STRENGTH_GOAL, coreN >= CORE_GOAL, bikeN >= BIKE_DAYS];   // clockwise from top
+    const N = segs.length, R = 16, C = 2 * Math.PI * R, GAP = 4, LEN = (C - N * GAP) / N;
     const arcs = segs.map((on, i) =>
       `<circle cx="20" cy="20" r="${R}" fill="none" stroke="${on ? 'var(--check)' : '#3a3f50'}" stroke-width="5" ` +
       `stroke-dasharray="${LEN} ${C - LEN}" stroke-dashoffset="${-i * (LEN + GAP)}" transform="rotate(-90 20 20)"/>`).join('');
     const met = segs.filter(Boolean).length;
-    const label = met === 3 ? '&#10003;' : `${met}/3`;
-    const tip = `Steps ${stepsN}/7 · Core+Bike ${dailyN}/7 · Strength ${strN}/${STRENGTH_GOAL}`;
+    const label = met === N ? '&#10003;' : `${met}/${N}`;
+    const tip = `Steps ${stepsN}/${STEPS_DAYS} · Strength ${strN}/${STRENGTH_GOAL} · Core ${coreN}/${CORE_GOAL} · Bike ${bikeN}/${BIKE_DAYS}`;
     return `<div class="wkchecks" title="${tip}"><svg viewBox="0 0 40 40">${arcs}` +
-      `<text x="20" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="${met === 3 ? '#F472B6' : '#8b91a3'}">${label}</text></svg></div>`;
+      `<text x="20" y="24" text-anchor="middle" font-size="11" font-weight="700" fill="${met === N ? '#F472B6' : '#8b91a3'}">${label}</text></svg></div>`;
   }
 
   function render() {
